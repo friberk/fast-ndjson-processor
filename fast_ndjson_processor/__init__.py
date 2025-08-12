@@ -33,13 +33,12 @@ from .exceptions import (
 )
 from .fast_ndjson_processor import FastNDJSONProcessor
 from .fast_ndjson_writer import FastNDJSONWriter
-from .functions import process_ndjson, stream_ndjson
+from .functions import process_ndjson, process_ndjson_chunks, stream_ndjson
 from .processor_mode import ProcessorMode
 from .writer_mode import WriterMode
 
 __version__ = "1.0.0"
-__author__ = "Your Name"
-__email__ = "your.email@example.com"
+__author__ = "Berk Çakar"
 
 __all__ = [
     # Main classes
@@ -48,6 +47,7 @@ __all__ = [
     # Convenience functions
     "process_ndjson",
     "stream_ndjson",
+    "process_ndjson_chunks",
     # Enums
     "ProcessorMode",
     "WriterMode",
