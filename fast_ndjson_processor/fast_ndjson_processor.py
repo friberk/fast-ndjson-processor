@@ -37,7 +37,9 @@ class JSONRecord(Protocol):
 
 
 RecordType = Dict[str, Any]
+ChunkType = List[RecordType]
 HandlerReturn = Any
+ChunkHandlerReturn = Any
 
 from tqdm import tqdm
 
@@ -126,11 +128,76 @@ class FastNDJSONProcessor:
             raise FileHandlingError(f"Path is not a file: {filepath}")
 
         if mode == ProcessorMode.PARALLEL:
-            results = self._process_parallel(filepath, handler, return_results, progress_desc)
+            results = self._process_parallel(
+                filepath, handler, return_results, progress_desc, chunk_handler=False
+            )
         elif mode == ProcessorMode.SEQUENTIAL:
-            results = self._process_sequential(filepath, handler, return_results, progress_desc)
+            results = self._process_sequential(
+                filepath, handler, return_results, progress_desc, chunk_handler=False
+            )
         elif mode == ProcessorMode.STREAMING:
             results = list(self.stream_file(filepath, handler)) if return_results else None
+        else:
+            raise ConfigurationError(
+                f"Invalid processing mode: {mode}. Must be one of {list(ProcessorMode)}"
+            )
+
+        return results
+
+    def process_file_chunks(
+        self,
+        filepath: Union[str, Path],
+        chunk_handler: Callable[[ChunkType], ChunkHandlerReturn],
+        mode: ProcessorMode = ProcessorMode.PARALLEL,
+        progress_desc: str = "Processing chunks",
+        return_results: bool = True,
+    ) -> Optional[List[ChunkHandlerReturn]]:
+        """
+        Process an NDJSON file with chunk-level processing.
+
+        Each worker receives a list of records (chunk) to process at once,
+        allowing for custom batch operations, aggregations, or transformations.
+
+        Args:
+            filepath: Path to the NDJSON file
+            chunk_handler: Function to process each chunk (list of records)
+            mode: Processing mode (PARALLEL or SEQUENTIAL, STREAMING not supported)
+            progress_desc: Description for progress bar
+            return_results: Whether to return results
+
+        Returns:
+            List of chunk processing results if return_results=True, None otherwise
+
+        Example:
+            >>> def analyze_chunk(records):
+            ...     return {
+            ...         "count": len(records),
+            ...         "avg_value": sum(r.get("value", 0) for r in records) / len(records),
+            ...         "unique_ids": list(set(r["id"] for r in records))
+            ...     }
+            >>> processor = FastNDJSONProcessor()
+            >>> results = processor.process_file_chunks("data.ndjson", analyze_chunk)
+
+        Raises:
+            FileNotFoundError: If the file doesn't exist
+            ValueError: If an invalid processing mode is specified
+        """
+        filepath = Path(filepath)
+        if not filepath.exists():
+            raise FileHandlingError(f"File not found: {filepath}")
+        if not filepath.is_file():
+            raise FileHandlingError(f"Path is not a file: {filepath}")
+
+        if mode == ProcessorMode.PARALLEL:
+            results = self._process_parallel(
+                filepath, chunk_handler, return_results, progress_desc, chunk_handler=True
+            )
+        elif mode == ProcessorMode.SEQUENTIAL:
+            results = self._process_sequential(
+                filepath, chunk_handler, return_results, progress_desc, chunk_handler=True
+            )
+        elif mode == ProcessorMode.STREAMING:
+            raise ConfigurationError("Chunk processing is not supported in STREAMING mode")
         else:
             raise ConfigurationError(
                 f"Invalid processing mode: {mode}. Must be one of {list(ProcessorMode)}"
@@ -193,10 +260,13 @@ class FastNDJSONProcessor:
     def _process_sequential(
         self,
         filepath: Path,
-        handler: Callable[[RecordType], HandlerReturn],
+        handler: Union[
+            Callable[[RecordType], HandlerReturn], Callable[[ChunkType], ChunkHandlerReturn]
+        ],
         return_results: bool = True,
         progress_desc: str = "Processing records",
-    ) -> Optional[List[HandlerReturn]]:
+        chunk_handler: bool = False,
+    ) -> Optional[Union[List[HandlerReturn], List[ChunkHandlerReturn]]]:
         """Process file sequentially in a single thread."""
         results = [] if return_results else None
 
@@ -205,51 +275,80 @@ class FastNDJSONProcessor:
         if not filepath.is_file():
             raise FileHandlingError(f"Path is not a file: {filepath}")
 
-        try:
-            with open(filepath, "r", encoding=self.encoding) as f:
-                line_number = 0
+        if chunk_handler:
+            # Use chunk-based processing
+            chunks = self._calculate_chunks(filepath)
 
-                # Count total lines for progress bar if needed
-                if self.show_progress:
-                    total_lines = sum(1 for _ in f)
-                    f.seek(0)
-                    line_iter = tqdm(f, total=total_lines, desc=progress_desc)
-                else:
-                    line_iter = f
+            if not chunks:
+                logger.warning(f"No chunks to process for file {filepath}")
+                return results
 
-                for line in line_iter:
-                    line_number += 1
-                    try:
-                        parsed = orjson.loads(line.strip())
-                        result = handler(parsed)
-                        if return_results and result is not None:
-                            results.append(result)
-                    except orjson.JSONDecodeError as e:
-                        if not self.skip_errors:
-                            raise SerializationError(
-                                f"Invalid JSON on line {line_number}: {e}", original_error=e
-                            )
-                        logger.warning(f"Skipped invalid JSON on line {line_number}: {e}")
-                    except Exception as e:
-                        if not self.skip_errors:
-                            raise ProcessingError(
-                                f"Handler failed on line {line_number}: {e}",
-                                line_number=line_number,
-                                original_error=e,
-                            )
-                        logger.warning(f"Handler failed on line {line_number}: {e}")
-        except (OSError, IOError) as e:
-            raise FileHandlingError(f"Failed to read file {filepath}: {e}") from e
+            # Set up progress bar if needed
+            chunk_iter = chunks
+            if self.show_progress:
+                chunk_iter = tqdm(chunks, desc=progress_desc)
+
+            for chunk in chunk_iter:
+                result = _process_chunk_with_handler(
+                    chunk=chunk,
+                    filepath=str(filepath),
+                    chunk_handler=handler,
+                    encoding=self.encoding,
+                    skip_errors=self.skip_errors,
+                    return_results=return_results,
+                )
+                if return_results and result is not None:
+                    results.append(result)
+        else:
+            # Record-by-record processing
+            try:
+                with open(filepath, "r", encoding=self.encoding) as f:
+                    line_number = 0
+
+                    # Count total lines for progress bar if needed
+                    if self.show_progress:
+                        total_lines = sum(1 for _ in f)
+                        f.seek(0)
+                        line_iter = tqdm(f, total=total_lines, desc=progress_desc)
+                    else:
+                        line_iter = f
+
+                    for line in line_iter:
+                        line_number += 1
+                        try:
+                            parsed = orjson.loads(line.strip())
+                            result = handler(parsed)
+                            if return_results and result is not None:
+                                results.append(result)
+                        except orjson.JSONDecodeError as e:
+                            if not self.skip_errors:
+                                raise SerializationError(
+                                    f"Invalid JSON on line {line_number}: {e}", original_error=e
+                                )
+                            logger.warning(f"Skipped invalid JSON on line {line_number}: {e}")
+                        except Exception as e:
+                            if not self.skip_errors:
+                                raise ProcessingError(
+                                    f"Handler failed on line {line_number}: {e}",
+                                    line_number=line_number,
+                                    original_error=e,
+                                )
+                            logger.warning(f"Handler failed on line {line_number}: {e}")
+            except (OSError, IOError) as e:
+                raise FileHandlingError(f"Failed to read file {filepath}: {e}") from e
 
         return results
 
     def _process_parallel(
         self,
         filepath: Path,
-        handler: Callable[[RecordType], HandlerReturn],
+        handler: Union[
+            Callable[[RecordType], HandlerReturn], Callable[[ChunkType], ChunkHandlerReturn]
+        ],
         return_results: bool = True,
         progress_desc: str = "Processing chunks",
-    ) -> Optional[List[HandlerReturn]]:
+        chunk_handler: bool = False,
+    ) -> Optional[Union[List[HandlerReturn], List[ChunkHandlerReturn]]]:
         """Process file in parallel using multiple processes."""
         chunks = self._calculate_chunks(filepath)
 
@@ -262,14 +361,24 @@ class FastNDJSONProcessor:
             return all_results
 
         with mp.Pool(processes=self.n_workers) as pool:
-            worker_func = partial(
-                _process_chunk,
-                filepath=str(filepath),
-                handler=handler,
-                encoding=self.encoding,
-                skip_errors=self.skip_errors,
-                return_results=return_results,
-            )
+            if chunk_handler:
+                worker_func = partial(
+                    _process_chunk_with_handler,
+                    filepath=str(filepath),
+                    chunk_handler=handler,
+                    encoding=self.encoding,
+                    skip_errors=self.skip_errors,
+                    return_results=return_results,
+                )
+            else:
+                worker_func = partial(
+                    _process_chunk,
+                    filepath=str(filepath),
+                    handler=handler,
+                    encoding=self.encoding,
+                    skip_errors=self.skip_errors,
+                    return_results=return_results,
+                )
 
             # Create iterator that will yield results
             result_iter = pool.imap_unordered(worker_func, chunks)
@@ -281,7 +390,10 @@ class FastNDJSONProcessor:
             # Process results as they come in
             for result in result_iter:
                 if return_results and result is not None:
-                    all_results.extend(result)
+                    if chunk_handler:
+                        all_results.append(result)  # Chunk handlers return single results
+                    else:
+                        all_results.extend(result)  # Record handlers return lists
 
         return all_results
 
@@ -397,3 +509,68 @@ def _process_chunk(
         return results
     else:
         return None
+
+
+def _process_chunk_with_handler(
+    chunk: Tuple[int, int],
+    filepath: str,
+    chunk_handler: Callable[[ChunkType], ChunkHandlerReturn],
+    encoding: str,
+    skip_errors: bool,
+    return_results: bool = True,
+) -> Optional[ChunkHandlerReturn]:
+    """Worker function to process a chunk with a chunk-level handler."""
+    start, end = chunk
+    records = []
+
+    try:
+        with open(filepath, "r", encoding=encoding) as f:
+            f.seek(start)
+            current_pos = start
+            line_number = 0
+
+            for line in f:
+                # Calculate the actual byte position before processing
+                line_bytes = line.encode(encoding)
+                if current_pos + len(line_bytes) > end:
+                    break
+
+                current_pos += len(line_bytes)
+                line_number += 1
+
+                try:
+                    record = orjson.loads(line.strip())
+                    records.append(record)
+                except orjson.JSONDecodeError as e:
+                    if not skip_errors:
+                        raise SerializationError(
+                            f"Invalid JSON in chunk at position {current_pos}: {e}",
+                            original_error=e,
+                        )
+                    # Skip silently in multiprocessing to avoid logging issues
+                except Exception as e:
+                    if not skip_errors:
+                        raise ProcessingError(
+                            f"Error parsing line in chunk at position {current_pos}: {e}",
+                            original_error=e,
+                        )
+                    # Skip silently in multiprocessing to avoid logging issues
+
+        # Process the entire chunk at once
+        if records and chunk_handler is not None:
+            try:
+                result = chunk_handler(records)
+                if return_results:
+                    return result
+            except Exception as e:
+                if not skip_errors:
+                    raise ProcessingError(
+                        f"Chunk handler failed for chunk {start}-{end}: {e}",
+                        original_error=e,
+                    )
+                # Skip silently in multiprocessing to avoid logging issues
+
+    except (OSError, IOError) as e:
+        raise FileHandlingError(f"Failed to process chunk in file {filepath}: {e}") from e
+
+    return None

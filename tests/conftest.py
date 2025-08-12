@@ -82,6 +82,27 @@ def create_empty_file(temp_dir):
     return _create_file
 
 
+@pytest.fixture
+def create_large_ndjson_file(temp_dir):
+    """Create a large NDJSON file for testing."""
+
+    def _create_file(num_records: int = 1000, filename: str = "large.ndjson") -> Path:
+        filepath = temp_dir / filename
+        with open(filepath, "w") as f:
+            for i in range(num_records):
+                record = {
+                    "id": i,
+                    "name": f"User{i}",
+                    "value": i * 2.5,
+                    "category": f"cat_{i % 5}",
+                    "active": i % 2 == 0,
+                }
+                f.write(json.dumps(record) + "\n")
+        return filepath
+
+    return _create_file
+
+
 def global_mock_handler(record: Dict[str, Any]) -> Dict[str, Any]:
     """Global mock handler function for testing (pickleable)."""
     return {"processed_id": record["id"], "processed": True}
@@ -104,6 +125,96 @@ def global_flexible_handler(record: Dict[str, Any]) -> Dict[str, Any]:
     return {"processed_id": record_id, "processed": True}
 
 
+# Global chunk handlers for testing (must be pickleable)
+def global_chunk_counter(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Count records in a chunk."""
+    return {
+        "count": len(records),
+        "total_value": sum(r.get("id", 0) for r in records),
+        "first_id": records[0]["id"] if records else None,
+        "last_id": records[-1]["id"] if records else None,
+    }
+
+
+def global_chunk_aggregator(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Aggregate records by category."""
+    categories = {}
+    for record in records:
+        # Create a mock category based on id
+        category = "A" if record["id"] % 2 == 0 else "B"
+        if category not in categories:
+            categories[category] = {"count": 0, "ids": []}
+        categories[category]["count"] += 1
+        categories[category]["ids"].append(record["id"])
+
+    return categories
+
+
+def global_chunk_statistics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate statistics for a chunk."""
+    if not records:
+        return {"count": 0, "min": None, "max": None, "sum": 0}
+
+    ids = [r["id"] for r in records]
+    return {
+        "count": len(ids),
+        "min": min(ids),
+        "max": max(ids),
+        "sum": sum(ids),
+        "avg": sum(ids) / len(ids),
+    }
+
+
+def global_simple_chunk_count(records: List[Dict[str, Any]]) -> int:
+    """Return simple count of records."""
+    return len(records)
+
+
+def global_chunk_info(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return basic chunk information."""
+    return {
+        "size": len(records),
+        "min_id": min(r["id"] for r in records) if records else None,
+        "max_id": max(r["id"] for r in records) if records else None,
+    }
+
+
+def global_analyze_chunk(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Analyze a chunk of records."""
+    return {
+        "record_count": len(records),
+        "id_sum": sum(r["id"] for r in records),
+    }
+
+
+def global_sometimes_failing_chunk_handler(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Sometimes fail based on chunk characteristics."""
+    if len(records) > 10:  # Fail on large chunks
+        raise ValueError("Test error")
+    return {"count": len(records)}
+
+
+def global_count_valid_records(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Count valid records."""
+    return {"valid_count": len(records)}
+
+
+def global_process_large_chunk(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Process chunk with large records."""
+    return {
+        "count": len(records),
+        "data_sizes": [len(r.get("data", "")) for r in records],
+    }
+
+
+def global_chunk_identifier(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Identify chunk by record IDs."""
+    return {
+        "chunk_id": f"{records[0]['id']}-{records[-1]['id']}" if records else "empty",
+        "size": len(records),
+    }
+
+
 @pytest.fixture
 def failing_handler():
     """Handler that always fails for error testing."""
@@ -114,3 +225,22 @@ def failing_handler():
 def flexible_handler():
     """Handler that works with various record structures."""
     return global_flexible_handler
+
+
+# Chunk handler fixtures
+@pytest.fixture
+def chunk_counter():
+    """Chunk handler that counts records."""
+    return global_chunk_counter
+
+
+@pytest.fixture
+def chunk_aggregator():
+    """Chunk handler that aggregates records."""
+    return global_chunk_aggregator
+
+
+@pytest.fixture
+def chunk_statistics():
+    """Chunk handler that calculates statistics."""
+    return global_chunk_statistics

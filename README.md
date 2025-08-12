@@ -6,6 +6,7 @@ A **high-performance Python library** for processing NDJSON (Newline Delimited J
 
 - **⚡ High Performance**: Multiprocessing with chunking for optimal speed
 - **🔄 Multiple Processing Modes**: Parallel, Sequential, and Streaming
+- **📦 Chunk Processing**: Process batches of records for aggregations and transformations
 - **📝 Type Safety**: Full type annotations and mypy support
 
 ## 📦 **Installation**
@@ -44,6 +45,22 @@ print(f"Processed {len(results)} records")
 for record in processor.stream_file("large_file.ndjson"):
     # Process one record at a time
     process_record(record)
+```
+
+### Chunk Processing
+
+```python
+# Process chunks of records for aggregations
+def analyze_chunk(records):
+    """Process a batch of records at once"""
+    return {
+        "count": len(records),
+        "total_value": sum(r.get("value", 0) for r in records),
+        "categories": list(set(r.get("category") for r in records))
+    }
+
+# Use the class method
+results = processor.process_file_chunks("data.ndjson", analyze_chunk)
 ```
 
 ### Writing NDJSON Files
