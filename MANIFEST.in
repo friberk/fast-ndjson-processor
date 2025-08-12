@@ -1,0 +1,33 @@
+# Include important files in the distribution
+include README.md
+include LICENSE
+include CONTRIBUTING.md
+include pyproject.toml
+include requirements.txt
+
+# Include package data
+recursive-include fast_ndjson_processor *.py
+include fast_ndjson_processor/py.typed
+
+# Include tests (optional)
+recursive-include tests *.py
+
+# Include documentation
+recursive-include docs *.rst *.md *.txt *.py
+recursive-include docs/_static *
+recursive-include docs/_templates *
+
+# Exclude development and build files
+exclude .gitignore
+exclude .pre-commit-config.yaml
+exclude tox.ini
+exclude .coverage
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.so
+recursive-exclude * .DS_Store
+recursive-exclude .git *
+recursive-exclude .github *
+recursive-exclude build *
+recursive-exclude dist *
+recursive-exclude *.egg-info *
