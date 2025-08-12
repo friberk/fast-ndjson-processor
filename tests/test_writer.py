@@ -377,13 +377,9 @@ class TestFileLocking:
         # Lock should be released after context manager
         assert not writer._file_lock.is_locked
 
-    @pytest.mark.skipif(
-        platform.system() == "Windows",
-        reason="Unix-specific fcntl test"
-    )
+    @pytest.mark.skipif(platform.system() == "Windows", reason="Unix-specific fcntl test")
     def test_unix_file_locking_mechanism(self, temp_dir):
         """Test Unix-specific file locking using fcntl."""
-        import fcntl
         import threading
         import time
 
@@ -414,7 +410,6 @@ class TestFileLocking:
         assert len(results) == 2
         success_count = len([r for r in results if r.startswith("success")])
         assert success_count >= 1  # At least one should succeed
-
 
     def test_file_lock_creates_lock_file(self, temp_dir):
         """Test that a .lock file is created when using file locking."""
