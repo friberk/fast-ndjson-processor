@@ -69,7 +69,7 @@ class FastNDJSONProcessor:
         >>> results = processor.process_file("data.ndjson", custom_handler)
 
         Process specific number of batches with batch information:
-        >>> processor = FastNDJSONProcessor(number_of_batches=64)
+        >>> processor = FastNDJSONProcessor(n_batches=64)
         >>> def batch_handler(records, batch_info):
         ...     return {
         ...         "batch_id": batch_info.batch_id,
@@ -94,7 +94,7 @@ class FastNDJSONProcessor:
         encoding: str = "utf-8",
         skip_errors: bool = True,
         show_progress: bool = False,
-        number_of_batches: Optional[int] = None,
+        n_batches: Optional[int] = None,
         start_line: Optional[int] = None,
         end_line: Optional[int] = None,
     ) -> None:
@@ -107,19 +107,19 @@ class FastNDJSONProcessor:
             encoding: File encoding (default: 'utf-8')
             skip_errors: Whether to skip malformed JSON lines (default: True)
             show_progress: Show progress bar if tqdm is available (default: False)
-            number_of_batches: Number of batches to create (overrides chunk_size calculation)
+            n_batches: Number of batches to create (overrides chunk_size calculation)
             start_line: First line to process (1-based, defaults to 1)
             end_line: Last line to process (1-based, defaults to end of file)
 
         Raises:
-            ValueError: If n_workers, chunk_size, number_of_batches are negative or if line ranges are invalid
+            ValueError: If n_workers, chunk_size, n_batches are negative or if line ranges are invalid
         """
         if n_workers is not None and n_workers <= 0:
             raise ConfigurationError("n_workers must be positive")
         if chunk_size is not None and chunk_size <= 0:
             raise ConfigurationError("chunk_size must be positive")
-        if number_of_batches is not None and number_of_batches <= 0:
-            raise ConfigurationError("number_of_batches must be positive")
+        if n_batches is not None and n_batches <= 0:
+            raise ConfigurationError("n_batches must be positive")
         if start_line is not None and start_line < 1:
             raise ConfigurationError("start_line must be >= 1")
         if end_line is not None and end_line < 1:
@@ -132,7 +132,7 @@ class FastNDJSONProcessor:
         self.encoding = encoding
         self.skip_errors = skip_errors
         self.show_progress = show_progress
-        self.number_of_batches = number_of_batches
+        self.n_batches = n_batches
         self.start_line = start_line
         self.end_line = end_line
 
@@ -233,7 +233,7 @@ class FastNDJSONProcessor:
             ...         "count": len(records),
             ...         "batch_size": batch_info.batch_size
             ...     }
-            >>> processor = FastNDJSONProcessor(number_of_batches=8)
+            >>> processor = FastNDJSONProcessor(n_batches=8)
             >>> results = processor.process_file_chunks("data.ndjson", analyze_with_info, include_batch_info=True)
 
         Raises:
@@ -516,8 +516,8 @@ class FastNDJSONProcessor:
         lines_to_process = actual_end_line - actual_start_line + 1
 
         # Determine number of chunks
-        if self.number_of_batches:
-            num_chunks = min(self.number_of_batches, lines_to_process)
+        if self.n_batches:
+            num_chunks = min(self.n_batches, lines_to_process)
         else:
             num_chunks = min(self.n_workers, lines_to_process)
 

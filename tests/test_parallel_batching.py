@@ -73,7 +73,7 @@ class TestParallelBatching(unittest.TestCase):
     def test_parallel_number_of_batches_exact_count(self):
         """Test that parallel processing creates the exact number of batches requested."""
         processor = FastNDJSONProcessor(
-            number_of_batches=5,
+            n_batches=5,
             n_workers=3
         )
 
@@ -101,7 +101,7 @@ class TestParallelBatching(unittest.TestCase):
     def test_parallel_batch_info_metadata(self):
         """Test that batch metadata is correct in parallel processing."""
         processor = FastNDJSONProcessor(
-            number_of_batches=4,
+            n_batches=4,
             n_workers=2
         )
 
@@ -128,7 +128,7 @@ class TestParallelBatching(unittest.TestCase):
         processor = FastNDJSONProcessor(
             start_line=20,
             end_line=60,
-            number_of_batches=3,
+            n_batches=3,
             n_workers=2
         )
 
@@ -166,7 +166,7 @@ class TestParallelBatching(unittest.TestCase):
     def test_parallel_batch_distribution(self):
         """Test that parallel processing distributes batches evenly."""
         processor = FastNDJSONProcessor(
-            number_of_batches=7,
+            n_batches=7,
             n_workers=3
         )
 
@@ -186,9 +186,9 @@ class TestParallelBatching(unittest.TestCase):
         self.assertEqual(sum(batch_sizes), 100)
 
     def test_parallel_more_workers_than_batches(self):
-        """Test parallel processing when n_workers > number_of_batches."""
+        """Test parallel processing when n_workers > n_batches."""
         processor = FastNDJSONProcessor(
-            number_of_batches=2,
+            n_batches=2,
             n_workers=8
         )
 
@@ -214,7 +214,7 @@ class TestParallelBatching(unittest.TestCase):
     def test_parallel_single_batch(self):
         """Test parallel processing with a single batch."""
         processor = FastNDJSONProcessor(
-            number_of_batches=1,
+            n_batches=1,
             n_workers=4
         )
 
@@ -231,7 +231,7 @@ class TestParallelBatching(unittest.TestCase):
     def test_parallel_backward_compatibility(self):
         """Test that parallel processing works without include_batch_info."""
         processor = FastNDJSONProcessor(
-            number_of_batches=3,
+            n_batches=3,
             n_workers=2
         )
 
@@ -249,7 +249,7 @@ class TestParallelBatching(unittest.TestCase):
     def test_parallel_error_handling(self):
         """Test parallel processing with error handling."""
         processor = FastNDJSONProcessor(
-            number_of_batches=3,
+            n_batches=3,
             n_workers=2,
             skip_errors=True
         )

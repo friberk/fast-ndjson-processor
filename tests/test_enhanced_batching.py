@@ -3,7 +3,7 @@
 Proper tests for the enhanced batching capabilities of FastNDJSONProcessor.
 
 Tests verify that:
-1. number_of_batches creates exactly the specified number of batches
+1. n_batches creates exactly the specified number of batches
 2. start_line/end_line processes only the specified line range
 3. BatchInfo contains correct metadata
 4. Batch distribution is correct
@@ -89,9 +89,9 @@ class TestEnhancedBatching(unittest.TestCase):
         return self.test_file
 
     def test_number_of_batches_exact_count(self):
-        """Test that number_of_batches creates exactly the specified number of batches."""
+        """Test that n_batches creates exactly the specified number of batches."""
         test_file = self.create_test_file(100)
-        processor = FastNDJSONProcessor(number_of_batches=8)
+        processor = FastNDJSONProcessor(n_batches=8)
 
         def batch_handler(records, batch_info):
             return {
@@ -123,7 +123,7 @@ class TestEnhancedBatching(unittest.TestCase):
     def test_line_range_processing(self):
         """Test that start_line/end_line processes only the specified range."""
         test_file = self.create_test_file(100)
-        processor = FastNDJSONProcessor(start_line=21, end_line=30, number_of_batches=3)
+        processor = FastNDJSONProcessor(start_line=21, end_line=30, n_batches=3)
 
         def batch_handler(records, batch_info):
             return {
@@ -164,7 +164,7 @@ class TestEnhancedBatching(unittest.TestCase):
     def test_batch_info_metadata(self):
         """Test that BatchInfo contains correct metadata."""
         test_file = self.create_test_file(50)
-        processor = FastNDJSONProcessor(number_of_batches=5)
+        processor = FastNDJSONProcessor(n_batches=5)
 
         def batch_handler(records, batch_info):
             # Verify batch_size matches actual records
@@ -194,7 +194,7 @@ class TestEnhancedBatching(unittest.TestCase):
     def test_batch_distribution(self):
         """Test that batches are distributed as evenly as possible."""
         test_file = self.create_test_file(100)
-        processor = FastNDJSONProcessor(number_of_batches=7)  # 100/7 = ~14.3
+        processor = FastNDJSONProcessor(n_batches=7)  # 100/7 = ~14.3
 
         def batch_handler(records, batch_info):
             return {
@@ -216,7 +216,7 @@ class TestEnhancedBatching(unittest.TestCase):
     def test_backward_compatibility(self):
         """Test that existing functionality still works without batch info."""
         test_file = self.create_test_file(50)
-        processor = FastNDJSONProcessor(n_workers=4)  # Use n_workers instead of number_of_batches
+        processor = FastNDJSONProcessor(n_workers=4)  # Use n_workers instead of n_batches
 
         # Old-style chunk handler (no batch info)
         def chunk_handler(records):
@@ -236,7 +236,7 @@ class TestEnhancedBatching(unittest.TestCase):
     def test_single_batch(self):
         """Test edge case with single batch."""
         test_file = self.create_test_file(10)
-        processor = FastNDJSONProcessor(number_of_batches=1)
+        processor = FastNDJSONProcessor(n_batches=1)
 
         def batch_handler(records, batch_info):
             return {
@@ -258,9 +258,9 @@ class TestEnhancedBatching(unittest.TestCase):
         self.assertEqual(result["count"], 10)
 
     def test_more_batches_than_lines(self):
-        """Test when number_of_batches exceeds number of lines."""
+        """Test when n_batches exceeds number of lines."""
         test_file = self.create_test_file(3)
-        processor = FastNDJSONProcessor(number_of_batches=10)
+        processor = FastNDJSONProcessor(n_batches=10)
 
         def batch_handler(records, batch_info):
             return {"batch_id": batch_info.batch_id, "count": len(records)}
