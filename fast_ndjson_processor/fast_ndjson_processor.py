@@ -441,8 +441,8 @@ class FastNDJSONProcessor:
                     )
                     worker_args.append(args)
 
-                # Use imap_unordered for processing to get results as they complete
-                result_iter = pool.imap_unordered(_process_chunk_with_handler_wrapper, worker_args)
+                # Use starmap for processing
+                result_iter = pool.starmap(_process_chunk_with_handler, worker_args)
 
                 # Process results as they arrive to minimize memory usage
                 if self.show_progress:
@@ -473,8 +473,8 @@ class FastNDJSONProcessor:
                     )
                     worker_args.append(args)
 
-                # Use imap_unordered for processing to get results as they complete
-                result_iter = pool.imap_unordered(_process_chunk_wrapper, worker_args)
+                # Use starmap for processing
+                result_iter = pool.starmap(_process_chunk, worker_args)
 
                 # Process results as they arrive to minimize memory usage
                 if self.show_progress:
@@ -687,13 +687,3 @@ def _process_chunk_with_handler(
         raise FileHandlingError(f"Failed to process chunk in file {filepath}: {e}") from e
 
     return None
-
-
-def _process_chunk_wrapper(args):
-    """Wrapper function to unpack arguments for _process_chunk."""
-    return _process_chunk(*args)
-
-
-def _process_chunk_with_handler_wrapper(args):
-    """Wrapper function to unpack arguments for _process_chunk_with_handler."""
-    return _process_chunk_with_handler(*args)
