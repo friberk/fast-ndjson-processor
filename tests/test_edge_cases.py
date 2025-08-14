@@ -49,7 +49,7 @@ class TestEdgeCasesProcessor:
         processor = FastNDJSONProcessor()
         filepath = create_ndjson_file()
 
-        with pytest.raises(FileHandlingError, match="Failed to read file"):
+        with pytest.raises(FileHandlingError, match="Failed to count lines"):
             processor.process_file(filepath, mock_handler, ProcessorMode.SEQUENTIAL)
 
     def test_sequential_json_decode_error_no_skip(
@@ -99,25 +99,26 @@ class TestEdgeCasesProcessor:
 
         chunks = processor._calculate_chunks(filepath)
 
-        # Should have multiple chunks due to small chunk size
-        assert len(chunks) >= 2
-        assert all(start < end for start, end in chunks)
+        # Should have chunks based on n_workers (chunk_size is ignored in line-based mode)
+        assert len(chunks) >= 1
+        assert all(chunk_start_line <= chunk_end_line for _, chunk_start_line, chunk_end_line, _, _ in chunks)
 
-    def test_find_newline_boundary_at_file_end(self, temp_dir):
-        """Test _find_newline_boundary when seeking beyond file end."""
+    def test_line_based_processing_small_file(self, temp_dir):
+        """Test line-based processing with a small file."""
         # Create a small file without trailing newline
         filepath = temp_dir / "small.ndjson"
         with open(filepath, "w") as f:
-            f.write('{"id": 1}')
+            f.write('{"id": 1}\n{"id": 2}')
 
         processor = FastNDJSONProcessor()
+        chunks = processor._calculate_chunks(filepath)
 
-        with open(filepath, "rb") as f:
-            # Test boundary finding beyond file end
-            file_size = f.seek(0, 2)  # Get file size
-            boundary = processor._find_newline_boundary(f, file_size + 10)
-            # When pos > file_size, it should return the position passed in
-            assert boundary == file_size + 10
+        # Should have at least one chunk
+        assert len(chunks) >= 1
+        # Each chunk should have valid line ranges
+        for chunk_id, start_line, end_line, _, _ in chunks:
+            assert start_line >= 1
+            assert end_line >= start_line
 
 
 class TestEdgeCasesWriter:

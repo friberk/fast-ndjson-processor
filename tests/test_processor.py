@@ -174,7 +174,7 @@ class TestFastNDJSONProcessor:
 
         chunks = processor._calculate_chunks(filepath)
         assert len(chunks) >= 1
-        assert all(start < end for start, end in chunks)
+        assert all(chunk_start_line <= chunk_end_line for _, chunk_start_line, chunk_end_line, _, _ in chunks)
 
     def test_progress_bar_integration(self, create_ndjson_file, mock_handler):
         """Test progress bar integration."""
